@@ -297,6 +297,59 @@ class AuthAPI(BaseAuthAPI):
         raise VkAuthError('Auth check code is needed')
 
 
+class StoredAuthAPI(AuthAPI):
+    def __init__(self, app_id=None, user_login='', user_password='', stored_token='',
+                 scope='offline', phone_number=None, api_version=None,
+                 **kwargs):
+        logger.debug('Init AuthMixin: %r', self)
+
+        self.app_id = app_id
+        self._login = user_login
+        self._password = user_password
+        self._kwargs = kwargs
+        self.scope = scope
+        self._access_token = None
+        self._api_version = api_version
+        self._stored_token = '50ab3b3e332a1b9400037427c545262acc8f29ad83f1b68f8f2b6cdb996c01c2d459fedc54ba5e367c217'
+
+        # using for auto-authentication in case when it's required by login
+        # form, for instance when you try to login from unusual place
+        self._phone_number = phone_number
+
+        # Some API methods get args (e.g. user id) from access token.
+        # If we define user login, we need get access token now.
+        if self._login or self._stored_token:
+            self.renew_access_token()
+    
+    def get_access_token(self):
+        """
+        Get access token using app id and user login and password
+        if now stored token provided
+        else use stored token as access token
+        """
+
+        if not all([self.app_id, self._login, self._password]) and not self._stored_token:
+            raise ValueError(
+                'app_id=%s, login=%s password=%s (masked) must be given' % (
+                    self.app_id, self._login, bool(self._password)))
+
+        logger.info("Getting access token for user '%s'" % self._login)
+        with VerboseHTTPSession() as s:
+            if self._stored_token:
+                url_query_params['access_token'] = self._stored_token
+                self._stored_token = None
+            else:
+                self.do_login(session=s)
+                url_query_params = self.do_oauth2_authorization(session=s)
+                logger.debug('url_query_params: %s', url_query_params)
+
+        if 'access_token' in url_query_params:
+            logger.info('Done')
+            return url_query_params['access_token']
+        else:
+            raise VkAuthError('OAuth2 authorization error')
+
+
 class InteractiveAuthAPI(AuthAPI):
     """Interactive auth api with manual login, password, captcha management"""
 

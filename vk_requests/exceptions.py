@@ -69,3 +69,12 @@ class VkAPIError(VkException):
         if self.redirect_uri:
             tokens.append('redirect_uri=\'%s\'' % self.redirect_uri)
         return ','.join(tokens)
+
+
+class StoredVkAPIError(VkAPIError):
+    """
+    api with stored token should be able to handle expired and invalid tokens
+    """
+    def is_access_token_incorrect(self):
+        return all([(self.code == ACCESS_DENIED or self.code == AUTHORIZATION_FAILED),
+                    'access_token' in self.message])

@@ -227,3 +227,43 @@ class EmptyStoredVKSessionTest(unittest.TestCase):
         session.access_token = new_token_value
         self.assertEqual(session.access_token, new_token_value)
         self.assertEqual(session.censored_access_token, 'my_f***oken')
+
+
+class BogusEmptyStoredVKSessionTest(unittest.TestCase):
+    STORED_TOKEN = 'expired_or_invalid_token'
+
+    @staticmethod
+    def get_default_vk_session(**kwargs):
+        return StoredVKSession(stored_token=BogusEmptyStoredVKSessionTest.STORED_TOKEN, **kwargs)
+
+    def test_session_init(self):
+        session = self.get_default_vk_session()
+        # Expect no errors
+        self.assertIsInstance(session, VKSession)
+        self.assertIsInstance(session, StoredVKSession)
+
+        # Token is required, cuz auth stored token passed
+        self.assertTrue(session.auth_api.is_token_required)
+
+    def test_custom_auth_api_cls(self):
+        class MyAuthAPI(StoredAuthAPI):
+            @staticmethod
+            def get_captcha_key(captcha_image_url):
+                return 1
+
+        # Create session with custom AuthAPI implementation
+        session = self.get_default_vk_session(auth_api_cls=MyAuthAPI)
+        self.assertIsInstance(session.auth_api, MyAuthAPI)
+
+    def test_access_token_property(self):
+        # Check token getter
+        session = self.get_default_vk_session()
+        self.assertTrue(session.access_token)
+        self.assertIsInstance(session.access_token, six.string_types)
+        self.assertEqual(session.access_token, self.STORED_TOKEN)
+
+        # Check token setter
+        new_token_value = 'my_fake_access_token'
+        session.access_token = new_token_value
+        self.assertEqual(session.access_token, new_token_value)
+        self.assertEqual(session.censored_access_token, 'my_f***oken')

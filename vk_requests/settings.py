@@ -4,6 +4,7 @@ import json
 import os.path
 
 # Set your environment variables for testing or put values here or into a credentials file
+# file contents - simple Python dict where app_id is a number and the others are strings, use 'creds' as template
 creds_file = './vk_requests/creds.json'
 creds = {"user_login": None, "user_password": None, "app_id": None, "phone_number": None}
 if os.path.isfile(creds_file):

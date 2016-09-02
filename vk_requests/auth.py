@@ -6,10 +6,9 @@ import logging
 import six
 from six.moves import input as raw_input
 
-from vk_requests.exceptions import VkAuthError, VkAPIError, VkParseError, StoredVkAPIError
-from vk_requests.utils import parse_url_query_params, VerboseHTTPSession, \
-    parse_form_action_url, json_iter_parse, stringify_values, \
-    parse_masked_phone_number, check_html_warnings
+from vk_requests.exceptions import (VkAuthError, VkAPIError, VkParseError, StoredVkAPIError)
+from vk_requests.utils import (parse_url_query_params, VerboseHTTPSession, parse_form_action_url,
+                               json_iter_parse, stringify_values, parse_masked_phone_number, check_html_warnings)
 
 logger = logging.getLogger('vk-requests')
 
@@ -25,7 +24,7 @@ class BaseAuthAPI(object):
     DEFAULT_API_VERSION = '5.45'
 
     def __init__(self, app_id=None, user_login='', user_password='',
-                 scope='offline', phone_number=None, api_version=None,
+                 scope='offline', phone_number=None, api_version=None, stored_token='',
                  **kwargs):
         logger.debug('Init %s: %r', self.__class__.__name__, self)
 
@@ -297,70 +296,6 @@ class AuthAPI(BaseAuthAPI):
         raise VkAuthError('Auth check code is needed')
 
 
-class StoredAuthAPI(AuthAPI):
-    """
-    stored_token should be provided by the api factory
-    """
-    def __init__(self, app_id=None, user_login='', user_password='', stored_token='',
-                 scope='offline', phone_number=None, api_version=None,
-                 **kwargs):
-        logger.debug('Init AuthMixin: %r', self)
-
-        self.app_id = app_id
-        self._login = user_login
-        self._password = user_password
-        self._kwargs = kwargs
-        self.scope = scope
-        self._access_token = None
-        self._api_version = api_version
-        self._stored_token = stored_token
-
-        # using for auto-authentication in case when it's required by login
-        # form, for instance when you try to login from unusual place
-        self._phone_number = phone_number
-
-        # Some API methods get args (e.g. user id) from access token.
-        # If we define user login, we need get access token now.
-        if self._login or self._stored_token:
-            self.renew_access_token()
-    
-    def get_access_token(self):
-        """
-        Get access token using app id and user login and password
-        if no stored token provided
-        else use stored token as access token
-        """
-
-        if not all([self.app_id, self._login, self._password]) and not self._stored_token:
-            raise ValueError(
-                'app_id=%s, login=%s password=%s (masked) must be given' % (
-                    self.app_id, self._login, bool(self._password)))
-
-        logger.info("Getting access token for user '%s'" % self._login)
-        with VerboseHTTPSession() as s:
-            if self._stored_token:
-                url_query_params = {'access_token': self._stored_token}
-                self._stored_token = None
-            else:
-                self.do_login(session=s)
-                url_query_params = self.do_oauth2_authorization(session=s)
-                logger.debug('url_query_params: %s', url_query_params)
-
-        if 'access_token' in url_query_params:
-            logger.info('Done')
-            return url_query_params['access_token']
-        else:
-            raise VkAuthError('OAuth2 authorization error')
-
-    def is_token_required(self):
-        """Helper method for vk_requests.auth.VKSession initialization
-
-        :return: bool
-        """
-        return True
-
-
-
 class InteractiveAuthAPI(AuthAPI):
     """Interactive auth api with manual login, password, captcha management"""
 
@@ -416,19 +351,66 @@ class InteractiveAuthAPI(AuthAPI):
         return auth_check_code.strip()
 
 
+class StoredAuthAPI(AuthAPI):
+    """
+    stored_token should be provided by the api factory
+    """
+    def __init__(self, **kwargs):
+        super(StoredAuthAPI, self).__init__(**kwargs)
+        self._stored_token = stored_token
+
+        # Stored token should be accepted first
+        if self._login or self._stored_token:
+            self.renew_access_token()
+    
+    def get_access_token(self):
+        """
+        Get access token using app id and user login and password
+        if no stored token provided
+        else use stored token as access token
+        """
+
+        if not all([self.app_id, self._login, self._password]) and not self._stored_token:
+            raise ValueError(
+                'app_id=%s, login=%s password=%s (masked) must be given' % (
+                    self.app_id, self._login, bool(self._password)))
+
+        logger.info("Getting access token for user '%s'" % self._login)
+        with VerboseHTTPSession() as s:
+            if self._stored_token:
+                url_query_params = {'access_token': self._stored_token}
+                self._stored_token = None
+            else:
+                self.do_login(session=s)
+                url_query_params = self.do_oauth2_authorization(session=s)
+                logger.debug('url_query_params: %s', url_query_params)
+
+        if 'access_token' in url_query_params:
+            logger.info('Done')
+            return url_query_params['access_token']
+        else:
+            raise VkAuthError('OAuth2 authorization error')
+
+    def is_token_required(self):
+        """Helper method for vk_requests.auth.VKSession initialization
+        No doubts here, StoredAuthAPI meant to be used with token
+        :return: bool
+        """
+        return True
+
+
 class VKSession(object):
     API_URL = 'https://api.vk.com/method/'
     DEFAULT_AUTH_API_CLS = AuthAPI
 
-    def __init__(self, app_id=None, user_login=None, user_password=None, stored_token=None,
-                 phone_number=None, auth_api_cls=None, **api_kwargs):
+    def __init__(self, app_id=None, user_login=None, user_password=None,
+                 phone_number=None, auth_api_cls=None, stored_token=None, **api_kwargs):
 
         self.auth_api_cls = auth_api_cls or self.DEFAULT_AUTH_API_CLS
         self.auth_api = self.get_auth_api(app_id=app_id,
                                           login=user_login,
                                           password=user_password,
                                           phone_number=phone_number,
-                                          stored_token=stored_token,
                                           **api_kwargs)
         self.censored_access_token = None
 
@@ -540,6 +522,24 @@ class StoredVKSession(VKSession):
     If api has been created with a bad token it could be worth trying to obtain new token
     """
     DEFAULT_AUTH_API_CLS = StoredAuthAPI
+
+    def __init__(self, **kwargs):
+
+        self.auth_api_cls = auth_api_cls or self.DEFAULT_AUTH_API_CLS
+        self.auth_api = self.get_auth_api(app_id=app_id,
+                                          login=user_login,
+                                          password=user_password,
+                                          phone_number=phone_number,
+                                          stored_token=stored_token,
+                                          **api_kwargs)
+        self.censored_access_token = None
+
+        # requests.Session subclass instance
+        self.http_session = VerboseHTTPSession()
+        self.http_session.headers['Accept'] = 'application/json'
+        self.http_session.headers['Content-Type'] = \
+            'application/x-www-form-urlencoded'
+
     def make_request(self, request_obj, captcha_response=None):
         logger.debug('Prepare API Method request %r', request_obj)
         response = self.send_api_request(request=request_obj,
@@ -572,15 +572,16 @@ class StoredVKSession(VKSession):
                         'Authorization failed. Access token will be dropped')
                     self.access_token = None
                     return self.make_request(request_obj)
-
                 else:
                     raise vk_error
+
             elif 'execute_errors' in response_or_error:
                 # can take place while running .execute vk method
                 # See more: https://vk.com/dev/execute
                 raise VkAPIError(response_or_error['execute_errors'][0])
             elif 'response' in response_or_error:
                 return response_or_error['response']
+
 
 class InteractiveVKSession(VKSession):
     DEFAULT_AUTH_API_CLS = InteractiveAuthAPI

@@ -33,7 +33,8 @@ def create_api(app_id=None, login=None, password=None, phone_number=None,
     sessions in a relatively short period of time (1 day)
     If there is any possibility that provided token invalid, expired
     or could expire during session activity it would be much
-    safer to provide app_id, login and password as well.
+    safer to provide app_id, login and password as well
+    otherwise api will fail with ValueError.
     All changes was made with the primary goal to not to break existing code.
     example call:
     from vk_requests.auth import StoredVKSession

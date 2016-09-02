@@ -17,5 +17,4 @@ obj
 *.user
 *.pdb
 Settings.settings
-trials.py
 vk_requests/creds.json

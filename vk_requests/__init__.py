@@ -39,6 +39,7 @@ def create_api(app_id=None, login=None, password=None, phone_number=None,
     from vk_requests.auth import StoredVKSession
     api = vk_requests.create_api(app_id=app_id, login=login, password=password,
                                  stored_token=token, session_cls=StoredVKSession)
+    Important: stored token should have same scope as callee passing to api factory
     :param stored_token: str: previously obtained, preferably valid token
     """
     session = session_cls(app_id, login, password, phone_number=phone_number,

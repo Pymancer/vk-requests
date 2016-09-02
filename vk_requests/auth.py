@@ -23,9 +23,8 @@ class BaseAuthAPI(object):
     CAPTCHA_URI = 'https://m.vk.com/captcha.php'
     DEFAULT_API_VERSION = '5.45'
 
-    def __init__(self, app_id=None, user_login='', user_password='',
-                 scope='offline', phone_number=None, api_version=None, stored_token='',
-                 **kwargs):
+    def __init__(self, app_id=None, user_login='', user_password='', scope='offline',
+                 phone_number=None, api_version=None, stored_token='', **kwargs):
         logger.debug('Init %s: %r', self.__class__.__name__, self)
 
         self.app_id = app_id
@@ -40,9 +39,14 @@ class BaseAuthAPI(object):
         # form, for instance when you try to login from unusual place
         self._phone_number = phone_number
 
+        # previously saved token if any
+        self._stored_token = stored_token
+
         # Some API methods get args (e.g. user id) from access token.
         # If we define user login, we need get access token now.
-        if self._login:
+        # if api factory provided with a valid token
+        # it should be used as an access token
+        if self._login or self._stored_token:
             self.renew_access_token()
 
     def __repr__(self):  # pragma: no cover
@@ -355,14 +359,6 @@ class StoredAuthAPI(AuthAPI):
     """
     stored_token should be provided by the api factory
     """
-    def __init__(self, **kwargs):
-        super(StoredAuthAPI, self).__init__(**kwargs)
-        self._stored_token = stored_token
-
-        # Stored token should be accepted first
-        if self._login or self._stored_token:
-            self.renew_access_token()
-    
     def get_access_token(self):
         """
         Get access token using app id and user login and password
@@ -411,6 +407,7 @@ class VKSession(object):
                                           login=user_login,
                                           password=user_password,
                                           phone_number=phone_number,
+                                          stored_token=stored_token,
                                           **api_kwargs)
         self.censored_access_token = None
 
@@ -522,23 +519,6 @@ class StoredVKSession(VKSession):
     If api has been created with a bad token it could be worth trying to obtain new token
     """
     DEFAULT_AUTH_API_CLS = StoredAuthAPI
-
-    def __init__(self, **kwargs):
-
-        self.auth_api_cls = auth_api_cls or self.DEFAULT_AUTH_API_CLS
-        self.auth_api = self.get_auth_api(app_id=app_id,
-                                          login=user_login,
-                                          password=user_password,
-                                          phone_number=phone_number,
-                                          stored_token=stored_token,
-                                          **api_kwargs)
-        self.censored_access_token = None
-
-        # requests.Session subclass instance
-        self.http_session = VerboseHTTPSession()
-        self.http_session.headers['Accept'] = 'application/json'
-        self.http_session.headers['Content-Type'] = \
-            'application/x-www-form-urlencoded'
 
     def make_request(self, request_obj, captcha_response=None):
         logger.debug('Prepare API Method request %r', request_obj)

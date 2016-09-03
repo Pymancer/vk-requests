@@ -2,7 +2,7 @@
 import time
 import unittest
 
-import mock
+from unittest import mock
 import six
 
 import vk_requests
@@ -80,15 +80,15 @@ class VkTestCase(unittest.TestCase):
         )
 
     def test_get_server_time(self):
-        time_1 = time.time() - 1
+        time_1 = time.time() - 5
         time_2 = time_1 + 10
         server_time = self.vk_api.getServerTime()
         self.assertTrue(time_1 <= server_time <= time_2)
 
     def test_get_server_time_via_token_api(self):
-        time_1 = time.time() - 1
+        time_1 = time.time() - 5
         time_2 = time_1 + 20
-        server_time = self.vk_api.getServerTime()
+        server_time = self._create_api().getServerTime()
         self.assertTrue(time_1 <= server_time <= time_2)
 
     def test_get_profiles_via_token(self):

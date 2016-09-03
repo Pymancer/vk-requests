@@ -6,10 +6,9 @@ import logging
 import six
 from six.moves import input as raw_input
 
-from vk_requests.exceptions import VkAuthError, VkAPIError, VkParseError
-from vk_requests.utils import parse_url_query_params, VerboseHTTPSession, \
-    parse_form_action_url, json_iter_parse, stringify_values, \
-    parse_masked_phone_number, check_html_warnings
+from vk_requests.exceptions import (VkAuthError, VkAPIError, VkParseError, StoredVkAPIError)
+from vk_requests.utils import (parse_url_query_params, VerboseHTTPSession, parse_form_action_url,
+                               json_iter_parse, stringify_values, parse_masked_phone_number, check_html_warnings)
 
 logger = logging.getLogger('vk-requests')
 
@@ -24,9 +23,8 @@ class BaseAuthAPI(object):
     CAPTCHA_URI = 'https://m.vk.com/captcha.php'
     DEFAULT_API_VERSION = '5.45'
 
-    def __init__(self, app_id=None, user_login='', user_password='',
-                 scope='offline', phone_number=None, api_version=None,
-                 **kwargs):
+    def __init__(self, app_id=None, user_login='', user_password='', scope='offline',
+                 phone_number=None, api_version=None, stored_token='', **kwargs):
         logger.debug('Init %s: %r', self.__class__.__name__, self)
 
         self.app_id = app_id
@@ -41,9 +39,14 @@ class BaseAuthAPI(object):
         # form, for instance when you try to login from unusual place
         self._phone_number = phone_number
 
+        # previously saved token if any
+        self._stored_token = stored_token
+
         # Some API methods get args (e.g. user id) from access token.
         # If we define user login, we need get access token now.
-        if self._login:
+        # if api factory provided with a valid token
+        # it should be used as an access token
+        if self._login or self._stored_token:
             self.renew_access_token()
 
     def __repr__(self):  # pragma: no cover
@@ -352,18 +355,59 @@ class InteractiveAuthAPI(AuthAPI):
         return auth_check_code.strip()
 
 
+class StoredAuthAPI(AuthAPI):
+    """
+    stored_token should be provided by the api factory
+    """
+    def get_access_token(self):
+        """
+        Get access token using app id and user login and password
+        if no stored token provided
+        else use stored token as access token
+        """
+
+        if not all([self.app_id, self._login, self._password]) and not self._stored_token:
+            raise ValueError(
+                'app_id=%s, login=%s password=%s (masked) must be given' % (
+                    self.app_id, self._login, bool(self._password)))
+
+        logger.info("Getting access token for user '%s'" % self._login)
+        with VerboseHTTPSession() as s:
+            if self._stored_token:
+                url_query_params = {'access_token': self._stored_token}
+                self._stored_token = None
+            else:
+                self.do_login(session=s)
+                url_query_params = self.do_oauth2_authorization(session=s)
+                logger.debug('url_query_params: %s', url_query_params)
+
+        if 'access_token' in url_query_params:
+            logger.info('Done')
+            return url_query_params['access_token']
+        else:
+            raise VkAuthError('OAuth2 authorization error')
+
+    def is_token_required(self):
+        """Helper method for vk_requests.auth.VKSession initialization
+        No doubts here, StoredAuthAPI meant to be used with token
+        :return: bool
+        """
+        return True
+
+
 class VKSession(object):
     API_URL = 'https://api.vk.com/method/'
     DEFAULT_AUTH_API_CLS = AuthAPI
 
     def __init__(self, app_id=None, user_login=None, user_password=None,
-                 phone_number=None, auth_api_cls=None, **api_kwargs):
+                 phone_number=None, auth_api_cls=None, stored_token=None, **api_kwargs):
 
         self.auth_api_cls = auth_api_cls or self.DEFAULT_AUTH_API_CLS
         self.auth_api = self.get_auth_api(app_id=app_id,
                                           login=user_login,
                                           password=user_password,
                                           phone_number=phone_number,
+                                          stored_token=stored_token,
                                           **api_kwargs)
         self.censored_access_token = None
 
@@ -467,6 +511,56 @@ class VKSession(object):
     def __repr__(self):  # pragma: no cover
         return "%s(api_url='%s', access_token='%s')" % (
             self.__class__.__name__, self.API_URL, self.auth_api._access_token)
+
+
+class StoredVKSession(VKSession):
+    """
+    StoredVKSession created to be used with a StoredAuthAPI
+    If api has been created with a bad token it could be worth trying to obtain new token
+    """
+    DEFAULT_AUTH_API_CLS = StoredAuthAPI
+
+    def make_request(self, request_obj, captcha_response=None):
+        logger.debug('Prepare API Method request %r', request_obj)
+        response = self.send_api_request(request=request_obj,
+                                         captcha_response=captcha_response)
+        response.raise_for_status()
+
+        # there are may be 2 dicts in one JSON
+        # for example: "{'error': ...}{'response': ...}"
+        for response_or_error in json_iter_parse(response.text):
+            if 'error' in response_or_error:
+                error_data = response_or_error['error']
+                vk_error = StoredVkAPIError(error_data)
+
+                if vk_error.is_captcha_needed():
+                    captcha_key = self.auth_api.get_captcha_key(
+                        vk_error.captcha_img)
+
+                    if not captcha_key:
+                        raise vk_error
+
+                    captcha_response = {
+                        'sid': vk_error.captcha_sid,
+                        'key': captcha_key,
+                    }
+                    return self.make_request(
+                        request_obj, captcha_response=captcha_response)
+
+                elif vk_error.is_access_token_incorrect():
+                    logger.info(
+                        'Authorization failed. Access token will be dropped')
+                    self.access_token = None
+                    return self.make_request(request_obj)
+                else:
+                    raise vk_error
+
+            elif 'execute_errors' in response_or_error:
+                # can take place while running .execute vk method
+                # See more: https://vk.com/dev/execute
+                raise VkAPIError(response_or_error['execute_errors'][0])
+            elif 'response' in response_or_error:
+                return response_or_error['response']
 
 
 class InteractiveVKSession(VKSession):

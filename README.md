@@ -53,9 +53,30 @@ Useful for dev purposes. You will be asked about login, password and app_id
 interactively in console. Useful if CAPTCHA required.
         
         from vk_requests.auth import InteractiveVKSession
-        
-        
+
+
         api = vk_requests.create_api(..., session_cls=InteractiveVKSession)
+
+
+### Stored token session
+
+Useful for quick connect
+Import StoredVKSession and pass active stored token, more help in `vk_requests/__init__.py`
+
+```
+from vk_requests.auth import StoredVKSession
+
+    api = vk_requests.create_api(app_id=123, login='User', password='Password',
+                                 stored_token='str_token', session_cls=StoredVKSession)
+```
+
+or if stored token is 100% valid and will not expire during the query:
+
+```
+from vk_requests.auth import StoredVKSession
+
+    api = vk_requests.create_api(stored_token='str_token', session_cls=StoredVKSession)
+```
 
 
 ### Auto-resolving conflicts when you getting access from unusual place

@@ -30,12 +30,15 @@ def create_api(app_id=None, login=None, password=None, phone_number=None,
     Passing StoredVKSession as vk session class with an active token
     could speed up the initial connection process, which is
     especially helpful when the callee could use many independent
-    sessions in a relatively short period of time (1 day)
+    sessions in a relatively short period of time (1 day) and
+    using singleton class for storing api instance is not an available option.
+
     If there is any possibility that provided token invalid, expired
     or could expire during session activity it would be much
     safer to provide app_id, login and password as well
     otherwise api will fail with ValueError.
-    All changes was made with the primary goal to not to break existing code.
+
+    All changes were made with a primary intention to not to break existing code.
     example call:
     from vk_requests.auth import StoredVKSession
     api = vk_requests.create_api(app_id=app_id, login=login, password=password,

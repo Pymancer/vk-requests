@@ -1,5 +1,5 @@
 
-from vk_requests.auth import InteractiveVKSession, VKSession
+from vk_requests.auth import (InteractiveVKSession, VKSession, StoredVKSession, CaptchaVKSession)
 from vk_requests.api import API
 
 
@@ -40,11 +40,16 @@ def create_api(app_id=None, login=None, password=None, phone_number=None,
 
     All changes were made with a primary intention to not to break existing code.
     example call:
-    from vk_requests.auth import StoredVKSession
+    from vk_requests import StoredVKSession
     api = vk_requests.create_api(app_id=app_id, login=login, password=password,
                                  stored_token=token, session_cls=StoredVKSession)
     Important: stored token should have same scope as callee passing to api factory
     :param stored_token: str: previously obtained, preferably valid token
+
+    helper class to avoid manual login/password entering passing captcha security check:
+    from vk_requests import CaptchaVKSession
+    api = vk_requests.create_api(app_id=app_id, login=login, password=password,
+                                 session_cls=CaptchaVKSession)
     """
     session = session_cls(app_id, login, password, phone_number=phone_number,
                           scope=scope, api_version=api_version, stored_token=stored_token)

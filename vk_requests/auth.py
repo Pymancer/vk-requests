@@ -395,6 +395,17 @@ class StoredAuthAPI(AuthAPI):
         return True
 
 
+class CaptchaAuthAPI(AuthAPI):
+    @staticmethod
+    def get_captcha_key(captcha_image_url):
+        """Read CAPTCHA key from user input
+        """
+
+        print('Open CAPTCHA image url: ', captcha_image_url)
+        captcha_key = raw_input('Enter CAPTCHA key: ')
+        return captcha_key
+
+
 class VKSession(object):
     API_URL = 'https://api.vk.com/method/'
     DEFAULT_AUTH_API_CLS = AuthAPI
@@ -565,3 +576,7 @@ class StoredVKSession(VKSession):
 
 class InteractiveVKSession(VKSession):
     DEFAULT_AUTH_API_CLS = InteractiveAuthAPI
+
+
+class CaptchaVKSession(VKSession):
+    DEFAULT_AUTH_API_CLS = CaptchaAuthAPI

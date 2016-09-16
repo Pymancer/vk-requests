@@ -46,7 +46,8 @@ def create_api(app_id=None, login=None, password=None, phone_number=None,
     Important: stored token should have same scope as callee passing to api factory
     :param stored_token: str: previously obtained, preferably valid token
 
-    helper class to avoid manual login/password entering passing captcha security check:
+    helper class to avoid manual login/password entering
+    during captcha security check:
     from vk_requests import CaptchaVKSession
     api = vk_requests.create_api(app_id=app_id, login=login, password=password,
                                  session_cls=CaptchaVKSession)

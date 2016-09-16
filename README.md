@@ -57,6 +57,8 @@ interactively in console. Useful if CAPTCHA required.
 
         api = vk_requests.create_api(..., session_cls=InteractiveVKSession)
 
+Also CaptchVKSession could be used to avoid unnecessary manual login and
+password typing.
 
 ### Stored token session
 

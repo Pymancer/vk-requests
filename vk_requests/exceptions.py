@@ -1,3 +1,4 @@
+import re
 
 # API Error Codes
 AUTHORIZATION_FAILED = 5        # Invalid access token
@@ -73,8 +74,10 @@ class VkAPIError(VkException):
 
 class StoredVkAPIError(VkAPIError):
     """
-    api with stored token should be able to handle expired and invalid tokens
+    api with stored token should be able to handle expired, invalid and revoked tokens
     """
+    msg_regexp = re.compile(r'.*access.+token.*')
+
     def is_access_token_incorrect(self):
         return all([(self.code == ACCESS_DENIED or self.code == AUTHORIZATION_FAILED),
-                    'access_token' in self.message])
+                    self.msg_regexp.match(self.message)])
